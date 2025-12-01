@@ -241,19 +241,7 @@ class _CadastroComplementarPageState extends State<CadastroComplementarPage> {
                   ],
                 ),
               ),
-              _buildCardSection(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "Escolha um avatar",
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                ),
-              ),
+            
               const SizedBox(height: 24),
               Center(
                 child: ElevatedButton(
