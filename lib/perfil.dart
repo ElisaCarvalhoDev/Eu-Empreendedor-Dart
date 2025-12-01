@@ -15,7 +15,8 @@ class PerfilPage extends StatefulWidget {
 
 class _PerfilPageState extends State<PerfilPage> {
   User? user = FirebaseAuth.instance.currentUser;
-  String userNameFromFirestore = '';
+  String? userNameFromFirestore;
+  String? userInitialsFromFirestore;
 
   final CollectionReference oportunidadesCollection =
       FirebaseFirestore.instance.collection('oportunidade');
@@ -27,10 +28,10 @@ class _PerfilPageState extends State<PerfilPage> {
   @override
   void initState() {
     super.initState();
-    _loadUserName();
+    _loadUserData();
   }
 
-  Future<void> _loadUserName() async {
+  Future<void> _loadUserData() async {
     if (user == null) return;
 
     final doc = await FirebaseFirestore.instance
@@ -42,156 +43,175 @@ class _PerfilPageState extends State<PerfilPage> {
       final data = doc.data() as Map<String, dynamic>;
       setState(() {
         userNameFromFirestore = data['nome'] ?? '';
+        userInitialsFromFirestore =
+            data['iniciais'] ?? _getUserInitials(userNameFromFirestore!);
       });
     }
   }
+
   Widget _buildPostsSection(String tipo) {
-  return StreamBuilder<QuerySnapshot>(
-    stream: _getUserPostsStream(tipo),
-    builder: (context, snapshot) {
-      if (snapshot.connectionState == ConnectionState.waiting) {
-        return const Center(child: CircularProgressIndicator());
-      }
-      if (snapshot.hasError) {
-        return Center(child: Text("Erro ao carregar $tipo"));
-      }
-      final docs = snapshot.data?.docs ?? [];
-      if (docs.isEmpty) {
-        return Center(child: Text("Nenhum $tipo encontrado"));
-      }
-      return ListView.builder(
-        itemCount: docs.length,
-        itemBuilder: (context, index) {
-          return _buildPostCard(docs[index], tipo);
-        },
-      );
-    },
-  );
-}
+    return StreamBuilder<QuerySnapshot>(
+      stream: _getUserPostsStream(tipo),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return Center(child: Text("Erro ao carregar $tipo"));
+        }
+        final docs = snapshot.data?.docs ?? [];
+        if (docs.isEmpty) {
+          return Center(child: Text("Nenhum $tipo encontrado"));
+        }
+        return ListView.builder(
+          itemCount: docs.length,
+          itemBuilder: (context, index) {
+            return _buildPostCard(docs[index], tipo);
+          },
+        );
+      },
+    );
+  }
 
-@override
-Widget build(BuildContext context) {
-  final displayName =
-      userNameFromFirestore.isNotEmpty ? userNameFromFirestore : (user?.displayName ?? 'Usuário');
+  @override
+  Widget build(BuildContext context) {
+    final displayName = userNameFromFirestore;
+    final displayInitials = userInitialsFromFirestore;
 
-  return DefaultTabController(
-    length: 3,
-    child: Scaffold(
-      appBar: null,
-      body: SafeArea(
-        child: Column(
-          children: [
-            const SizedBox(height: 10),
-            // CircleAvatar com iniciais
-            CircleAvatar(
-              radius: 50,
-              backgroundColor: Colors.green,
-              child: Text(
-                _getUserInitials(displayName),
-                style: const TextStyle(
-                    fontSize: 32, color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-            ),
-            const SizedBox(height: 10),
-            // Nome completo
-            Text(
-              displayName,
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-            // BOTÃO SAIR ESTILIZADO
-            GestureDetector(
-              onTap: () async {
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text("Confirmação"),
-                    content: const Text("Tem certeza que deseja sair?"),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        child: const Text("Não"),
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: null,
+        body: SafeArea(
+          child: Column(
+            children: [
+              const SizedBox(height: 10),
+              // CircleAvatar com iniciais ou placeholder
+              CircleAvatar(
+                radius: 50,
+                backgroundColor: Colors.green,
+                child: displayInitials != null
+                    ? Text(
+                        displayInitials,
+                        style: const TextStyle(
+                            fontSize: 32,
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold),
+                      )
+                    : const CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                       ),
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        child: const Text("Sim"),
+              ),
+              const SizedBox(height: 10),
+              // Nome completo ou placeholder
+              displayName != null
+                  ? Text(
+                      displayName,
+                      style: const TextStyle(
+                          fontSize: 22, fontWeight: FontWeight.bold),
+                    )
+                  : const SizedBox(
+                      width: 120,
+                      height: 24,
+                      child: LinearProgressIndicator(
+                        color: Colors.green,
+                        backgroundColor: Colors.greenAccent,
+                      ),
+                    ),
+              const SizedBox(height: 10),
+              // BOTÃO SAIR ESTILIZADO
+              GestureDetector(
+                onTap: () async {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text("Confirmação"),
+                      content: const Text("Tem certeza que deseja sair?"),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text("Não"),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text("Sim"),
+                        ),
+                      ],
+                    ),
+                  );
+
+                  if (confirm == true) {
+                    await FirebaseAuth.instance.signOut();
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (context) => TelaLogin()),
+                    );
+                  }
+                },
+                child: Container(
+                  margin:
+                      const EdgeInsets.symmetric(horizontal: 32, vertical: 10),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Colors.redAccent, Colors.red],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(30),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.red.withOpacity(0.4),
+                        offset: const Offset(0, 4),
+                        blurRadius: 6,
                       ),
                     ],
                   ),
-                );
-
-                if (confirm == true) {
-                  await FirebaseAuth.instance.signOut();
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (context) => TelaLogin()),
-                  );
-                }
-              },
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 32, vertical: 10),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Colors.redAccent, Colors.red],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(30),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.red.withOpacity(0.4),
-                      offset: const Offset(0, 4),
-                      blurRadius: 6,
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Icon(Icons.logout, color: Colors.white),
-                    SizedBox(width: 10),
-                    Text(
-                      "Sair",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: const [
+                      Icon(Icons.logout, color: Colors.white),
+                      SizedBox(width: 10),
+                      Text(
+                        "Sair",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 20),
-            // Abas
-            const TabBar(
-              labelColor: Colors.green,
-              unselectedLabelColor: Colors.black54,
-              tabs: [
-                Tab(text: "Oportunidades"),
-                Tab(text: "Ideias"),
-                Tab(text: "Conteúdos"),
-              ],
-            ),
-            const Divider(height: 1, color: Colors.grey),
-            // Conteúdo das abas
-            Expanded(
-              child: TabBarView(
-                children: [
-                  _buildPostsSection('Oportunidade'),
-                  _buildPostsSection('Ideia'),
-                  _buildPostsSection('Conteudo'),
+              const SizedBox(height: 20),
+              // Abas
+              const TabBar(
+                labelColor: Colors.green,
+                unselectedLabelColor: Colors.black54,
+                tabs: [
+                  Tab(text: "Oportunidades"),
+                  Tab(text: "Ideias"),
+                  Tab(text: "Conteúdos"),
                 ],
               ),
-            ),
-          ],
+              const Divider(height: 1, color: Colors.grey),
+              // Conteúdo das abas
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    _buildPostsSection('Oportunidade'),
+                    _buildPostsSection('Ideia'),
+                    _buildPostsSection('Conteudo'),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-    ),
-  );
-}
-
+    );
+  }
 
   String _getUserInitials(String nome) {
     final words = nome.trim().split(' ');
@@ -219,116 +239,116 @@ Widget build(BuildContext context) {
   }
 
   Widget _buildPostCard(DocumentSnapshot post, String tipo) {
-  final data = post.data() as Map<String, dynamic>;
-  final titulo = data['titulo'] ?? 'Sem título';
-  final descricao = data['descricao'] ?? '';
-  final imagem = data['figuraUrl']?.toString() ?? '';
+    final data = post.data() as Map<String, dynamic>;
+    final titulo = data['titulo'] ?? 'Sem título';
+    final descricao = data['descricao'] ?? '';
+    final imagem = data['figuraUrl']?.toString() ?? '';
 
-  return Card(
-    elevation: 4,
-    margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(tipo, style: const TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 6),
-          Text(titulo, style: const TextStyle(fontSize: 18)),
-          const SizedBox(height: 6),
-          if (descricao.isNotEmpty) Text(descricao),
-          if (imagem.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Image.network(imagem),
-            ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              // Botão de editar
-              IconButton(
-                icon: const Icon(Icons.edit, color: Colors.blue),
-                onPressed: () => _editPost(post, tipo),
+    return Card(
+      elevation: 4,
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(tipo, style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            Text(titulo, style: const TextStyle(fontSize: 18)),
+            const SizedBox(height: 6),
+            if (descricao.isNotEmpty) Text(descricao),
+            if (imagem.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Image.network(imagem),
               ),
-              // Botão de excluir com confirmação
-              IconButton(
-                icon: const Icon(Icons.delete, color: Colors.red),
-                onPressed: () async {
-                  final confirm = await showDialog<bool>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text("Excluir item"),
-                      content: const Text("Tem certeza que deseja excluir este item?"),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context, false),
-                          child: const Text("Cancelar"),
-                        ),
-                        TextButton(
-                          onPressed: () => Navigator.pop(context, true),
-                          child: const Text("Excluir", style: TextStyle(color: Colors.red)),
-                        ),
-                      ],
-                    ),
-                  );
-
-                  if (confirm == true) {
-                    await _deletePost(post, tipo); // <-- aqui chama sua função já existente
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("$tipo excluído com sucesso!")),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.edit, color: Colors.blue),
+                  onPressed: () => _editPost(post, tipo),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  onPressed: () async {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text("Excluir item"),
+                        content: const Text(
+                            "Tem certeza que deseja excluir este item?"),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text("Cancelar"),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text("Excluir",
+                                style: TextStyle(color: Colors.red)),
+                          ),
+                        ],
+                      ),
                     );
-                  }
-                },
-              ),
-            ],
-          ),
-        ],
-      ),
-    ),
-  );
-}
 
-// Mantém sua função existente de exclusão:
-Future<void> _deletePost(DocumentSnapshot doc, String tipo) async {
-  try {
-    if (tipo == 'Oportunidade') {
-      await oportunidadesCollection.doc(doc.id).delete();
-    } else if (tipo == 'Ideia') {
-      await ideiasCollection.doc(doc.id).delete();
-    } else if (tipo == 'Conteudo') {
-      await conteudosCollection.doc(doc.id).delete();
+                    if (confirm == true) {
+                      await _deletePost(post, tipo);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("$tipo excluído com sucesso!")),
+                      );
+                    }
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deletePost(DocumentSnapshot doc, String tipo) async {
+    try {
+      if (tipo == 'Oportunidade') {
+        await oportunidadesCollection.doc(doc.id).delete();
+      } else if (tipo == 'Ideia') {
+        await ideiasCollection.doc(doc.id).delete();
+      } else if (tipo == 'Conteudo') {
+        await conteudosCollection.doc(doc.id).delete();
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Erro ao excluir $tipo: $e")),
+      );
     }
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Erro ao excluir $tipo: $e")),
-    );
   }
-}
-Future<void> _editPost(DocumentSnapshot doc, String tipo) async {
-  if (doc['autorId'] != user?.uid) return; // proteção
 
-  if (tipo == 'Oportunidade') {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => RegistroOportunidadePage(oportunidadeDoc: doc),
-      ),
-    );
-  } else if (tipo == 'Ideia') {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => RegistroIdeiaPage(ideiaDoc: doc),
-      ),
-    );
-  } else if (tipo == 'Conteudo') {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => RegistroConteudoPage(conteudoDoc: doc),
-      ),
-    );
+  Future<void> _editPost(DocumentSnapshot doc, String tipo) async {
+    if (doc['autorId'] != user?.uid) return;
+
+    if (tipo == 'Oportunidade') {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => RegistroOportunidadePage(oportunidadeDoc: doc),
+        ),
+      );
+    } else if (tipo == 'Ideia') {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => RegistroIdeiaPage(ideiaDoc: doc),
+        ),
+      );
+    } else if (tipo == 'Conteudo') {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => RegistroConteudoPage(conteudoDoc: doc),
+        ),
+      );
+    }
   }
-}
 }

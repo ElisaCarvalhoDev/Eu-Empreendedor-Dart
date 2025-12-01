@@ -35,6 +35,9 @@ class _CadastroPageState extends State<CadastroPage> {
     final nome = nomeController.text.trim();
     final bool isInstitucional = email.endsWith("@ifsuldeminas.edu.br");
 
+    // Gerar iniciais do nome
+    String iniciais = _getInitials(nome);
+
     try {
       // Criar usuário no Authentication
       UserCredential cred = await FirebaseAuth.instance
@@ -51,6 +54,7 @@ class _CadastroPageState extends State<CadastroPage> {
           .doc(cred.user!.uid)
           .set({
         'nome': nome,
+        'iniciais': iniciais, // <-- SALVA AS INICIAIS
         'email': email,
         'tipo': isAluno ? 'Aluno' : 'Professor',
         'criadoEm': FieldValue.serverTimestamp(),
@@ -83,6 +87,14 @@ class _CadastroPageState extends State<CadastroPage> {
     } catch (e) {
       _mostrarErro("Erro inesperado: $e");
     }
+  }
+
+  // Função para gerar iniciais
+  String _getInitials(String nome) {
+    final words = nome.trim().split(' ');
+    if (words.isEmpty) return '';
+    if (words.length == 1) return words[0][0].toUpperCase();
+    return (words.first[0] + words.last[0]).toUpperCase();
   }
 
   void _mostrarErro(String mensagem) {
