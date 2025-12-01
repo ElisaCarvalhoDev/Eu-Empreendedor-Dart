@@ -109,7 +109,35 @@ class _RegistroOportunidadePageState extends State<RegistroOportunidadePage> {
         },
       });
 
-      print("Oportunidade criada com ID: ${docRef.id}");
+      // Criar notificação para o próprio usuário
+      await FirebaseFirestore.instance.collection('notificacao').add({
+        'titulo': 'Oportunidade criada',
+        'autor': usuario?.displayName ?? usuario?.email ?? 'Anônimo',
+        'usuarioId': usuario?.uid, // notificação para o próprio usuário
+        'lida': false,
+        'data': FieldValue.serverTimestamp(),
+        'mensagem': 'Você criou a oportunidade "${tituloController.text}"',
+        'dataInicio': dataInicio,
+        'dataFim': dataFim,
+      });
+
+      // Se quiser notificar um professor ou outro usuário, faça outro add aqui
+      // Exemplo:
+      // await FirebaseFirestore.instance.collection('notificacao').add({
+      //   'titulo': 'Nova oportunidade',
+      //   'autor': usuario?.displayName ?? usuario?.email ?? 'Anônimo',
+      //   'usuarioId': 'id_do_professor', 
+      //   'lida': false,
+      //   'data': FieldValue.serverTimestamp(),
+      //   'mensagem': '${usuario?.displayName} criou a oportunidade "${tituloController.text}"',
+      //   'dataInicio': dataInicio,
+      //   'dataFim': dataFim,
+      // });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Oportunidade criada com sucesso!")),
+      );
+
       Navigator.pop(context); // Voltar para a tela anterior
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(

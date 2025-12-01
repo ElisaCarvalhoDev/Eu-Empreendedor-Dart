@@ -17,26 +17,14 @@ class TelaLogin extends StatelessWidget {
  Future<void> login(BuildContext context) async {
   try {
     final emailDigitado = emailController.text.trim().toLowerCase();
+    final senha = senhaController.text.trim();
 
-    UserCredential userCredential = await FirebaseAuth.instance
-        .signInWithEmailAndPassword(
-      email: emailDigitado,
-      password: senhaController.text.trim(),
-    );
-
-    globals.userId = userCredential.user?.uid;
-
-    DocumentSnapshot doc = await FirebaseFirestore.instance
-        .collection('usuarios')
-        .doc(globals.userId)
-        .get();
-
-    if (!doc.exists) {
+    if (emailDigitado.isEmpty || senha.isEmpty) {
       showDialog(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (_) => AlertDialog(
           title: const Text('Erro'),
-          content: const Text('Conta não encontrada no banco.'),
+          content: const Text('Preencha todos os campos.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -48,51 +36,74 @@ class TelaLogin extends StatelessWidget {
       return;
     }
 
-    final data = doc.data() as Map<String, dynamic>;
-    bool emailVerificado = data['emailVerificado'] ?? false;
+    // Login no Firebase
+    UserCredential userCredential = await FirebaseAuth.instance
+        .signInWithEmailAndPassword(email: emailDigitado, password: senha);
 
-    // Professores reais
-    bool isProfessor = emailDigitado.endsWith('@ifsuldeminas.edu.br');
+    User? user = userCredential.user;
 
-    // Professores testes (gmail)
-    List<String> professoresTeste = [
-      "prof201@gmail.com",
-      "prof.teste02@gmail.com",
-      "outroprof@gmail.com",
+    if (user == null) {
+      throw FirebaseAuthException(
+          code: 'user-not-found', message: 'Usuário não encontrado.');
+    }
+
+    globals.userId = user.uid;
+
+    // Atualiza status do e-mail verificado
+    await user.reload();
+    bool emailVerificado = user.emailVerified;
+
+    // Recuperar dados do Firestore
+    DocumentSnapshot doc = await FirebaseFirestore.instance
+        .collection('usuarios')
+        .doc(user.uid)
+        .get();
+
+    String tipoUsuario = doc['tipo'] ?? 'Aluno';
+
+    // Lista de emails liberados (testes)
+    List<String> emailsLiberados = [
+      'teste@gmail.com',
+      'exemplo@gmail.com',
+      'eder@gmail.com'
+      'paulo@gmail.com'
+      'prof@gmail.com'
     ];
 
-    bool isProfessorTeste = professoresTeste.contains(emailDigitado);
+    // Verificar restrição de professores
+    if (tipoUsuario == 'Professor') {
+      bool isInstitucional = emailDigitado.endsWith('@ifsuldeminas.edu.br');
+      bool isLiberado = emailsLiberados.contains(emailDigitado);
 
-    // Se for professor real E não for teste E não tiver verificado = bloqueia
-    if (isProfessor && !isProfessorTeste && !emailVerificado) {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Erro'),
-          content: const Text(
-              'Professor: verifique seu e-mail antes de entrar. Clique no link enviado.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
-      return;
+      if (isInstitucional && !isLiberado && !emailVerificado) {
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('Erro'),
+            content: const Text(
+                'Professor: verifique seu e-mail institucional antes de entrar.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+        await FirebaseAuth.instance.signOut();
+        return;
+      }
     }
 
     // ---------- LOGIN LIBERADO ----------
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
-        builder: (context) =>
-            HomePage(userName: userCredential.user?.email ?? ''),
+        builder: (context) => HomePage(userName: user.email ?? ''),
       ),
     );
   } on FirebaseAuthException catch (e) {
     String message;
-
     if (e.code == 'user-not-found') {
       message = 'Nenhum usuário encontrado para esse e-mail.';
     } else if (e.code == 'wrong-password') {
@@ -103,7 +114,7 @@ class TelaLogin extends StatelessWidget {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (_) => AlertDialog(
         title: const Text('Erro'),
         content: Text(message),
         actions: [
@@ -116,6 +127,7 @@ class TelaLogin extends StatelessWidget {
     );
   }
 }
+
 
   @override
   Widget build(BuildContext context) {

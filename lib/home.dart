@@ -55,6 +55,16 @@ void initState() {
   super.initState();
   _fetchUserName();
   _selectedIndex = widget.initialIndex; // <<< CARREGAR ABA CORRETA
+   _getFeedStream().listen((posts) {
+    setState(() {
+      for (var post in posts) {
+        _localInteresse.putIfAbsent(
+          post['postId'],
+          () => Set<String>.from(post['interesse'] ?? []),
+        );
+      }
+    });
+  });
 }
   Future<void> toggleLike(String postId, String tipoColecao) async {
     final uid = globals.userId;
@@ -87,25 +97,53 @@ void initState() {
   }
 
   Future<void> toggleInteresse(String postId, String tipoColecao) async {
-    final uid = globals.userId;
-    if (uid == null) return;
+  final uid = globals.userId;
+  if (uid == null) {
+    print("Erro: usuário não está logado!");
+    return;
+  }
 
+  try {
+    final docRef = FirebaseFirestore.instance.collection(tipoColecao).doc(postId);
+    final doc = await docRef.get();
+    if (!doc.exists) {
+      print("Erro: documento não existe");
+      return;
+    }
+
+    final data = doc.data() as Map<String, dynamic>;
+    final interesse = List<String>.from(data['interesse'] ?? []);
+    final autorId = data['autorId'] ?? '';
+    final autorNome = data['autorNome'] ?? 'Professor';
+
+    if (autorId.isEmpty) {
+      print("Erro: autorId vazio");
+      return;
+    }
+
+    // Pegar dados do usuário atual
+    final usuarioSnapshot = await FirebaseFirestore.instance.collection('usuarios').doc(uid).get();
+    final usuarioNome = usuarioSnapshot.exists ? usuarioSnapshot.get('nome') ?? 'Usuário' : '';
+    final usuarioContato = usuarioSnapshot.exists ? usuarioSnapshot.get('contato') ?? '' : '';
+
+    // Pegar dados do professor
+    final autorSnapshot = await FirebaseFirestore.instance.collection('usuarios').doc(autorId).get();
+    final autorContato = autorSnapshot.exists ? autorSnapshot.get('contato') ?? '' : '';
+
+    final jaTem = interesse.contains(uid);
+
+    // Atualizar UI local instantaneamente
     setState(() {
       _localInteresse.putIfAbsent(postId, () => <String>{});
-      if (_localInteresse[postId]!.contains(uid)) {
+      if (jaTem) {
         _localInteresse[postId]!.remove(uid);
       } else {
         _localInteresse[postId]!.add(uid);
       }
     });
 
-    final docRef = FirebaseFirestore.instance
-        .collection(tipoColecao)
-        .doc(postId);
-    final doc = await docRef.get();
-    List interesse = (doc.data() as Map<String, dynamic>)['interesse'] ?? [];
-
-    if (interesse.contains(uid)) {
+    // Atualizar Firestore
+    if (jaTem) {
       await docRef.update({
         'interesse': FieldValue.arrayRemove([uid]),
       });
@@ -113,8 +151,31 @@ void initState() {
       await docRef.update({
         'interesse': FieldValue.arrayUnion([uid]),
       });
+
+      // Notificação para professor
+      await FirebaseFirestore.instance.collection('notificacao').add({
+        'usuarioId': autorId,
+        'mensagem': '$usuarioNome sentiu interesse na sua publicação. Contato: $usuarioContato',
+        'lida': false,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+
+      // Notificação para usuário
+      await FirebaseFirestore.instance.collection('notificacao').add({
+        'usuarioId': uid,
+        'mensagem': 'Você sentiu interesse na publicação do $autorNome. Contato do professor: $autorContato',
+        'lida': false,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
     }
+
+    print("Interesse atualizado com sucesso!");
+  } catch (e) {
+    print("Erro ao marcar interesse: $e");
   }
+}
+
+
 
   Future<void> _fetchUserName() async {
     if (globals.userId != null) {
@@ -510,7 +571,7 @@ void initState() {
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w400,
-              color: Colors.grey,
+              color: Color.fromARGB(255, 158, 158, 158),
               fontStyle: FontStyle.italic,
             ),
             maxLines: 1,
@@ -608,7 +669,7 @@ void initState() {
               IconButton(
                 tooltip: 'Ideias',
                 icon: const Icon(Icons.lightbulb),
-                color: _selectedIndex == 1 ? Colors.white : Colors.white70,
+                color: _selectedIndex == 1 ? Colors.white : Colors.green,
                 onPressed: () {
                   Navigator.push(
                     context,
@@ -677,8 +738,8 @@ class _FeedCardState extends State<FeedCard> {
     String colecao = tipo == 'oportunidade'
         ? 'oportunidade'
         : tipo == 'conteudo'
-        ? 'conteudos'
-        : 'ideias';
+            ? 'conteudos'
+            : 'ideias';
 
     String? urlImagem = post['figuraUrl'] ?? post['imagem'];
 
@@ -688,7 +749,7 @@ class _FeedCardState extends State<FeedCard> {
     final deuLike = likesList.contains(globals.userId);
 
     final interesseList = List<String>.from(
-      widget.localInteresse[postId] ?? (post['interesse'] ?? <dynamic>[]),
+      widget.localInteresse[postId] ?? (post['interesse'] ?? []),
     );
     final deuInteresse = interesseList.contains(globals.userId);
 
@@ -753,7 +814,9 @@ class _FeedCardState extends State<FeedCard> {
                         deuInteresse ? Icons.star : Icons.star_border,
                         color: Colors.orange,
                       ),
-                      onPressed: () => widget.toggleInteresse(postId, colecao),
+                      onPressed: globals.userId == null
+                          ? null // botão desabilitado se não logado
+                          : () => widget.toggleInteresse(postId, colecao),
                     ),
                     Text('${interesseList.length}'),
                   ],

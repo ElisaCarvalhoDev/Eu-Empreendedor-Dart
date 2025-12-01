@@ -24,70 +24,101 @@ class _CadastroPageState extends State<CadastroPage> {
     return email.toLowerCase().endsWith('@ifsuldeminas.edu.br');
   }
 
-  Future<void> cadastrarUsuario() async {
-    if (senhaController.text.trim() != confirmaSenhaController.text.trim()) {
-      _mostrarErro("As senhas não coincidem.");
+Future<void> cadastrarUsuario() async {
+  final email = emailController.text.trim();
+  final senha = senhaController.text.trim();
+  final confirmaSenha = confirmaSenhaController.text.trim();
+  final nome = nomeController.text.trim();
+
+  // Verificação de senha
+  if (senha != confirmaSenha) {
+    _mostrarErro("As senhas não coincidem.");
+    return;
+  }
+
+  // Verificação de campos vazios
+  if (nome.isEmpty || email.isEmpty || senha.isEmpty) {
+    _mostrarErro("Preencha todos os campos.");
+    return;
+  }
+
+  // Definindo emails liberados (para teste ou exceção)
+  final List<String> emailsLiberados = [
+    'teste@gmail.com',
+    'exemplo@gmail.com',
+     'eder@gmail.com'
+      'paulo@gmail.com'
+      'prof@gmail.com'
+  ];
+
+  // Checar se é email institucional
+  final bool isInstitucional = email.toLowerCase().endsWith('@ifsuldeminas.edu.br');
+
+  // Validar professor
+  if (!isAluno) { // se for professor
+    if (!isInstitucional && !emailsLiberados.contains(email.toLowerCase())) {
+      _mostrarErro(
+        "Professor só pode se cadastrar com e-mail institucional ou liberado."
+      );
       return;
     }
-
-    final email = emailController.text.trim();
-    final senha = senhaController.text.trim();
-    final nome = nomeController.text.trim();
-    final bool isInstitucional = email.endsWith("@ifsuldeminas.edu.br");
-
-    // Gerar iniciais do nome
-    String iniciais = _getInitials(nome);
-
-    try {
-      // Criar usuário no Authentication
-      UserCredential cred = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(email: email, password: senha);
-
-      // Enviar verificação se for institucional
-      if (isInstitucional) {
-        await cred.user!.sendEmailVerification();
-      }
-
-      // Criar documento no Firestore
-      await FirebaseFirestore.instance
-          .collection('usuarios')
-          .doc(cred.user!.uid)
-          .set({
-        'nome': nome,
-        'iniciais': iniciais, // <-- SALVA AS INICIAIS
-        'email': email,
-        'tipo': isAluno ? 'Aluno' : 'Professor',
-        'criadoEm': FieldValue.serverTimestamp(),
-        'emailVerificado': !isInstitucional, // se institucional = false
-      });
-
-      // Mensagem especial
-      if (isInstitucional) {
-        _mostrarErro(
-          "Enviamos um e-mail de verificação.\n"
-          "Confirme seu e-mail institucional antes de fazer login.",
-        );
-      }
-
-      // Ir para a tela de login
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => TelaLogin()),
-      );
-    } on FirebaseAuthException catch (e) {
-      String mensagem = "Erro ao cadastrar.";
-
-      if (e.code == 'email-already-in-use') {
-        mensagem = "Esse e-mail já está em uso.";
-      } else if (e.code == 'weak-password') {
-        mensagem = "A senha deve ter pelo menos 6 caracteres.";
-      }
-
-      _mostrarErro(mensagem);
-    } catch (e) {
-      _mostrarErro("Erro inesperado: $e");
-    }
   }
+
+  // Gerar iniciais
+  String iniciais = _getInitials(nome);
+
+  try {
+    // Criar usuário no Firebase Auth
+    UserCredential cred = await FirebaseAuth.instance
+        .createUserWithEmailAndPassword(email: email, password: senha);
+
+    // Enviar verificação de email apenas se for institucional
+    if (isInstitucional) {
+      await cred.user!.sendEmailVerification();
+    }
+
+    // Criar documento no Firestore
+    await FirebaseFirestore.instance
+        .collection('usuarios')
+        .doc(cred.user!.uid)
+        .set({
+      'nome': nome,
+      'iniciais': iniciais,
+      'email': email,
+      'tipo': isAluno ? 'Aluno' : 'Professor',
+      'criadoEm': FieldValue.serverTimestamp(),
+      'emailVerificado': isInstitucional ? false : true,
+    });
+
+    // Mensagem especial para institucional
+    if (isInstitucional) {
+      _mostrarAviso(
+        "Enviamos um e-mail de verificação.\n"
+        "Confirme seu e-mail institucional antes de fazer login."
+      );
+    }
+
+    // Redirecionar para login
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => TelaLogin()),
+    );
+
+  } on FirebaseAuthException catch (e) {
+    String mensagem = "Erro ao cadastrar.";
+
+    if (e.code == 'email-already-in-use') {
+      mensagem = "Esse e-mail já está em uso.";
+    } else if (e.code == 'weak-password') {
+      mensagem = "A senha deve ter pelo menos 6 caracteres.";
+    }
+
+    _mostrarErro(mensagem);
+  } catch (e) {
+    _mostrarErro("Erro inesperado: $e");
+  }
+}
+
 
   // Função para gerar iniciais
   String _getInitials(String nome) {

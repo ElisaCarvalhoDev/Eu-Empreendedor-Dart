@@ -382,7 +382,7 @@ case 3:
               IconButton(
                 tooltip: 'Ideias',
                 icon: const Icon(Icons.lightbulb),
-                color: _selectedIndex == 1 ? Colors.white : Colors.white70,
+                color: _selectedIndex == 1 ? Colors.white : Colors.green,
                 onPressed: () => _onNavTap(1),
               ),
               const SizedBox(width: 40), // espaço para o FAB
